@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Submit application{% endblock %}
+{% block topbar_title %}Submit application{% endblock %}
+{% block topbar_meta %}OCR extraction · registry verification · HITL on exceptions{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <h1>Onboard a merchant</h1>
+  <p>
+    Fill merchant details and upload PAN / GST images. Leave PAN and GSTIN text blank to let
+    Tesseract OCR extract them from the scans, then async verify against the fixture registry.
+  </p>
+</section>
+
+<section class="panel" style="margin-bottom:1rem">
+  <p class="panel-kicker">Gates</p>
+  <h2>OCR / quality thresholds</h2>
+  <dl class="kv" style="margin-top:0.5rem">
+    <div class="kv-row"><dt>Extraction confidence min</dt><dd class="mono">0.70</dd></div>
+    <div class="kv-row"><dt>Blur score (Laplacian var)</dt><dd>below <span class="mono">500</span> → BLURRED → MISSING_INFO</dd></div>
+    <div class="kv-row"><dt>Dark ratio</dt><dd>at/above <span class="mono">0.10</span> → BLACKED_OUT → MISSING_INFO</dd></div>
+    <div class="kv-row"><dt>Low contrast</dt><dd>stddev below <span class="mono">15</span> → UNREADABLE → MISSING_INFO</dd></div>
+    <div class="kv-row"><dt>Low OCR confidence</dt><dd>field conf &lt; 0.70 → IN_REVIEW (LOW_CONFIDENCE)</dd></div>
+    <div class="kv-row"><dt>Form vs OCR mismatch</dt><dd>IN_REVIEW (DOC_CONFLICT)</dd></div>
+  </dl>
+</section>
+
+{% if error %}
+<div class="callout" style="margin-bottom:1rem">{{ error }}</div>
+{% endif %}
+
+<section class="panel">
+  <p class="panel-kicker">Manual submit</p>
+  <h2>New merchant</h2>
+  <form method="post" action="/ops/submit-new" enctype="multipart/form-data" class="form-grid">
+    <label>Legal name<input name="legal_name" required placeholder="Acme Retail Pvt Ltd" /></label>
+    <label>Trade name<input name="trade_name" placeholder="Acme Store" /></label>
+    <label>PAN <span class="hint">(optional — OCR from image)</span>
+      <input name="pan" class="mono" pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]" placeholder="leave blank to extract" />
+    </label>
+    <label>GSTIN <span class="hint">(optional — OCR from image)</span>
+      <input name="gstin" class="mono" maxlength="15" placeholder="leave blank to extract" />
+    </label>
+    <label>Bank account<input name="bank_account_number" class="mono" placeholder="50100123456789" /></label>
+    <label>IFSC<input name="ifsc" class="mono" placeholder="HDFC0001234" /></label>
+    <label>Email<input name="contact_email" type="email" required placeholder="ops@example.test" /></label>
+    <label>Phone<input name="contact_phone" placeholder="+9198…" /></label>
+    <label>Category<input name="business_category" placeholder="retail" /></label>
+    <label>Verify scenario
+      <select name="scenario">
+        <option value="">Auto (registry lookup)</option>
+        <option value="gst_fail">Force GST fail</option>
+        <option value="pan_fail">Force PAN fail</option>
+        <option value="bank_fail">Force bank fail</option>
+        <option value="timeout">Force timeout</option>
+      </select>
+    </label>
+    <label class="full file-field">PAN card image (required)
+      <input type="file" name="pan_file" accept="image/*,.pdf" required />
+    </label>
+    <label class="full file-field">GST certificate image (required)
+      <input type="file" name="gst_file" accept="image/*,.pdf" required />
+    </label>
+    <label class="full file-field">Cancelled cheque (optional)
+      <input type="file" name="cheque_file" accept="image/*,.pdf" />
+    </label>
+    <div class="full" style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center">
+      <button class="primary" type="submit">Submit and run OCR</button>
+      <span class="hint">Try clear fixtures: M-001_pan_clear.png + M-001_gst_clear.png with PAN/GSTIN blank.</span>
+    </div>
+  </form>
+</section>
+
+<div class="divider"></div>
+
+<section>
+  <h2 class="section-title">Fixture pack</h2>
+  <p class="muted" style="margin:0 0 1rem;max-width:36rem">
+    One-click scenarios for happy path, GST/PAN fail, blurred docs, blacked-out docs, conflicts, and provision fail — each escalates to HITL where needed.
+  </p>
+  <div class="table-shell">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Scenario</th>
+          <th>PAN</th>
+          <th>GSTIN</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in merchants %}
+        <tr>
+          <td class="mono">{{ m.id }}</td>
+          <td>{{ m.legal_name }}</td>
+          <td><span class="badge">{{ m.scenario }}</span></td>
+          <td class="mono">{{ m.pan }}</td>
+          <td class="mono">{{ m.gstin }}</td>
+          <td>
+            <form method="post" action="/ops/submit-fixture">
+              <input type="hidden" name="merchant_id" value="{{ m.id }}" />
+              <button class="secondary" type="submit">Run fixture</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">
+    Preview:
+    <a href="/api/v1/fixtures/docs/M-001_pan_clear.png" target="_blank">clear PAN</a> ·
+    <a href="/api/v1/fixtures/docs/M-004_pan_blurred.png" target="_blank">blurred</a> ·
+    <a href="/api/v1/fixtures/docs/M-005_pan_blacked.png" target="_blank">blacked-out</a>
+  </p>
+</section>
+{% endblock %}

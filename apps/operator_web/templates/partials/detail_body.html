@@ -1,0 +1,270 @@
+{# Full detail body — HTMX-polled so status, form, checks, and audit stay in sync. #}
+<div
+  id="detail-live-root"
+  {% if poll_live %}
+  hx-get="/ops/applications/{{ app.id }}/live"
+  hx-trigger="every 2s"
+  hx-swap="outerHTML"
+  {% endif %}
+>
+{% if saved %}
+<div class="panel" style="border-color: var(--emerald); background: #f0fdf6; margin-bottom: 1rem;">
+  <strong style="color: var(--burnham)">Correction saved</strong>
+  <p class="muted" style="margin: 0.35rem 0 0">
+    Re-verification is running asynchronously. This page updates live — status and callback results will appear below.
+  </p>
+</div>
+{% endif %}
+
+{% if hitl_error %}
+<div class="callout" style="margin-bottom:1rem">{{ hitl_error }}</div>
+{% endif %}
+
+<div class="grid">
+  <div>
+    <header class="detail-hero">
+      <div>
+        <h1>{{ app.legal_name }}</h1>
+        <div class="meta">
+          <span>{{ app.reference }}</span>
+          <span>·</span>
+          <span>v{{ app.version }}</span>
+          <span class="badge {{ app.status }}">{{ app.status }}</span>
+          {% if poll_live %}
+          <span class="hint" style="margin:0">Live updating…</span>
+          {% endif %}
+        </div>
+      </div>
+    </header>
+
+    <section class="panel">
+      <p class="panel-kicker">Application</p>
+      <h2>Merchant profile</h2>
+      <dl class="kv">
+        <div class="kv-row"><dt>Trade name</dt><dd>{{ app.trade_name or '—' }}</dd></div>
+        <div class="kv-row"><dt>PAN</dt><dd class="mono">{{ app.pan_masked }}</dd></div>
+        <div class="kv-row"><dt>GSTIN</dt><dd class="mono">{{ app.gstin_masked }}</dd></div>
+        <div class="kv-row"><dt>Bank</dt><dd class="mono">{{ app.bank_account_masked or '—' }} / {{ app.ifsc or '—' }}</dd></div>
+        <div class="kv-row"><dt>Email</dt><dd>{{ app.contact_email }}</dd></div>
+        {% if app.merchant %}
+        <div class="kv-row">
+          <dt>Merchant ID</dt>
+          <dd>
+            <span class="mono">{{ app.merchant.id }}</span>
+            <span class="badge {{ app.merchant.provisioning_status }}">{{ app.merchant.provisioning_status }}</span>
+            <div class="hint">{{ app.merchant.capabilities }}</div>
+          </dd>
+        </div>
+        {% endif %}
+      </dl>
+    </section>
+
+    <section class="panel">
+      <p class="panel-kicker">Checks</p>
+      <h2>Required verifications</h2>
+      <ul class="checklist">
+        {% for p in app.config_checks.get('required_verifications', []) %}
+        <li>
+          {{ p }}
+          {% set ns = namespace(shown=false) %}
+          {% for v in app.verifications|reverse if v.provider == p and v.status != 'SUPERSEDED' %}
+            {% if not ns.shown %}
+              <span class="badge {{ v.status }}">{{ v.status }}</span>
+              {% if v.outcome %}<span class="badge {{ v.outcome }}">{{ v.outcome }}</span>{% endif %}
+              <span class="muted">attempt {{ v.attempt }}</span>
+              {% set ns.shown = true %}
+            {% endif %}
+          {% endfor %}
+          {% if not ns.shown %}
+            <span class="muted">not started</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="panel">
+      <p class="panel-kicker">Async providers</p>
+      <h2>Verifications and callbacks</h2>
+      <div class="table-shell" style="box-shadow:none;border-radius:var(--radius-sm)">
+        <table>
+          <thead>
+            <tr><th>Provider</th><th>Status</th><th>Outcome</th><th>Attempt</th><th>Correlation</th></tr>
+          </thead>
+          <tbody>
+            {% for v in app.verifications %}
+            <tr {% if v.status == 'SUPERSEDED' %}class="muted"{% endif %}>
+              <td class="mono">{{ v.provider }}</td>
+              <td><span class="badge {{ v.status }}">{{ v.status }}</span></td>
+              <td>{% if v.outcome %}<span class="badge {{ v.outcome }}">{{ v.outcome }}</span>{% else %}—{% endif %}</td>
+              <td class="mono">{{ v.attempt }}</td>
+              <td class="mono" style="font-size:0.72rem">{{ v.correlation_id[:13] }}…</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="muted">No verification requests yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if app.callbacks %}
+      <p class="panel-kicker" style="margin-top:1.1rem">Callback log</p>
+      <ul class="timeline">
+        {% for c in app.callbacks[-8:] %}
+        <li>
+          <span class="badge {{ c.processing_result }}">{{ c.processing_result }}</span>
+          {{ c.provider }} {{ c.outcome }}
+          <div class="meta">{{ c.received_at }} · {{ c.provider_event_id }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    {% if app.missing_info %}
+    <section class="panel">
+      <div class="callout">
+        <strong>Missing information</strong>
+        <ul>
+          {% for item in app.missing_info %}
+          <li>
+            {% if item.field is defined or item.message is defined %}
+              <span class="mono">{{ item.field or item.document_type or 'item' }}</span>
+              — {{ item.message or item }}
+              {% if item.quality_reason %}<span class="badge">{{ item.quality_reason }}</span>{% endif %}
+            {% else %}
+              {{ item }}
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if app.status == 'MISSING_INFO' %}
+    <section class="panel">
+      <p class="panel-kicker">Documents</p>
+      <h2>Re-upload</h2>
+      <p class="muted" style="margin-top:0">Replace flagged scans, then re-run extraction.</p>
+      {% if reupload_error %}<div class="callout" style="margin:0.75rem 0">{{ reupload_error }}</div>{% endif %}
+      <form method="post" action="/ops/applications/{{ app.id }}/reupload" enctype="multipart/form-data" class="form-grid" style="margin-top:0.85rem">
+        <label class="full file-field">PAN card<input type="file" name="pan_file" accept="image/*,.pdf" /></label>
+        <label class="full file-field">GST certificate<input type="file" name="gst_file" accept="image/*,.pdf" /></label>
+        <label class="full file-field">Cancelled cheque<input type="file" name="cheque_file" accept="image/*,.pdf" /></label>
+        <div class="full"><button class="primary" type="submit">Upload and re-run extraction</button></div>
+      </form>
+    </section>
+    {% endif %}
+
+    <section class="panel">
+      <p class="panel-kicker">Document intelligence</p>
+      <h2>Extractions</h2>
+      {% if not app.extractions %}
+      <p class="muted">No extraction results yet.</p>
+      {% endif %}
+      {% for e in app.extractions %}
+      <div class="extract-block">
+        <span class="badge {{ e.status }}">{{ e.status }}</span>
+        <span class="muted">{{ e.extractor }} · conf {{ '%.2f'|format(e.overall_confidence) }}</span>
+        <pre class="mono">{{ e.fields }}</pre>
+        {% if e.conflicts %}<p class="conflict" style="margin:0.4rem 0 0">Conflicts: {{ e.conflicts }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </section>
+  </div>
+
+  <div>
+    {% if app.status in ['MISSING_INFO', 'IN_REVIEW', 'EXTRACTION_FAILED'] and hitl_defaults %}
+    <section class="panel">
+      <p class="panel-kicker">Human in the loop</p>
+      <h2>Correct and re-run</h2>
+      <p class="muted" style="margin-top:0">
+        Live refresh is paused while this case needs your input. There is no input deadline.
+        For unreadable documents, upload clear replacements and use Auto.
+        For conflicts, align the form with the documents and use Auto.
+        For provider failures, correct the failed details using a matching PAN/GST pair.
+        Timeout cases can retry unchanged details; provisioning failures use Retry provision below.
+        Cancelled GST or inactive PAN may require rejection until valid evidence is supplied.
+      </p>
+      <form
+        method="post"
+        action="/ops/applications/{{ app.id }}/hitl-correct"
+        enctype="multipart/form-data"
+        class="stack-form"
+        style="margin-top:0.85rem"
+      >
+        <label>Legal name<input name="legal_name" value="{{ hitl_defaults.legal_name }}" /></label>
+        <label>PAN<input class="mono" name="pan" value="{{ hitl_defaults.pan }}" autocomplete="off" /></label>
+        <label>GSTIN<input class="mono" name="gstin" value="{{ hitl_defaults.gstin }}" autocomplete="off" /></label>
+        <label>Bank account<input class="mono" name="bank_account_number" value="{{ hitl_defaults.bank_account_number }}" /></label>
+        <label>IFSC<input class="mono" name="ifsc" value="{{ hitl_defaults.ifsc }}" /></label>
+        <label class="file-field">PAN image<input type="file" name="pan_file" accept="image/*,.pdf" /></label>
+        <label class="file-field">GST image<input type="file" name="gst_file" accept="image/*,.pdf" /></label>
+        <label class="file-field">Cheque image<input type="file" name="cheque_file" accept="image/*,.pdf" /></label>
+        <label>Mode
+          <select name="mode">
+            <option value="auto" selected>Auto</option>
+            <option value="extract">Force re-extract</option>
+            <option value="verify">Force async re-verify</option>
+          </select>
+        </label>
+        <label>Note<textarea name="note" rows="2" placeholder="Corrected identity to ACTIVE registry value…">{{ hitl_defaults.note_default }}</textarea></label>
+        <button class="primary" type="submit">Save correction and continue</button>
+      </form>
+    </section>
+    {% elif poll_live %}
+    <section class="panel">
+      <p class="panel-kicker">Human in the loop</p>
+      <h2>Re-verification in progress</h2>
+      <p class="muted" style="margin-top:0">
+        Correction accepted. Waiting on async provider callbacks — status above updates automatically.
+      </p>
+    </section>
+    {% endif %}
+
+    <section class="panel">
+      <p class="panel-kicker">Operator</p>
+      <h2>Actions</h2>
+      {% if open_case and app.status in ['MISSING_INFO', 'IN_REVIEW', 'EXTRACTION_FAILED'] %}
+      <p class="muted" style="margin-top:0">Open case · <span class="mono">{{ open_case.reason_codes }}</span></p>
+      <form method="post" action="/ops/applications/{{ app.id }}/actions" class="stack-form" style="margin-top:0.75rem">
+        <input type="hidden" name="case_id" value="{{ open_case.id }}" />
+        <input type="hidden" name="version" value="{{ app.version }}" />
+        <label>Action
+          <select name="action">
+            <option value="request_info">Request info</option>
+            <option value="approve">Approve (checks must pass)</option>
+            <option value="reject">Reject</option>
+            <option value="reverify">Re-verify (async)</option>
+            <option value="retry_provision">Retry provision</option>
+          </select>
+        </label>
+        <label>Note<textarea name="note" rows="3" required placeholder="Reason for action…"></textarea></label>
+        <button type="submit">Submit action</button>
+      </form>
+      {% else %}
+      <p class="muted" style="margin-top:0">
+        {% if poll_live %}No operator action needed while verification runs.{% else %}No open review case.{% endif %}
+        Status: {{ app.status }}.
+      </p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <p class="panel-kicker">Compliance</p>
+      <h2>Audit timeline</h2>
+      <ul class="timeline">
+        {% for e in app.audit %}
+        <li>
+          <strong>{{ e.action }}</strong>
+          {% if e.from_status %} {{ e.from_status }} → {{ e.to_status }}{% endif %}
+          <div class="meta">{{ e.created_at }} · {{ e.actor }}</div>
+        </li>
+        {% else %}
+        <li class="muted">No audit events yet.</li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>
+</div>

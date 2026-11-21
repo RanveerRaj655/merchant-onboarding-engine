@@ -1,0 +1,116 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: amop
+      POSTGRES_PASSWORD: amop
+      POSTGRES_DB: amop
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amop -d amop"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://amop:amop@postgres:5432/amop
+      DATABASE_URL_SYNC: postgresql+psycopg2://amop:amop@postgres:5432/amop
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MOCK_PROVIDER_URL: http://mock_providers:8001
+      API_BASE_URL: http://api:8000
+      DOC_STORAGE_PATH: /app/.data/docs
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - docdata:/app/.data/docs
+    # Host mount overwrites image layers; regenerate fixtures then migrate + serve
+    command: >
+      sh -c "python -m scripts.generate_fixtures &&
+             alembic upgrade head &&
+             uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mock_providers:
+        condition: service_started
+
+  worker:
+    build: .
+    command: celery -A apps.worker.celery_app worker --loglevel=info --concurrency=2
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://amop:amop@postgres:5432/amop
+      DATABASE_URL_SYNC: postgresql+psycopg2://amop:amop@postgres:5432/amop
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MOCK_PROVIDER_URL: http://mock_providers:8001
+      API_BASE_URL: http://api:8000
+      DOC_STORAGE_PATH: /app/.data/docs
+    volumes:
+      - .:/app
+      - docdata:/app/.data/docs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+      mock_providers:
+        condition: service_started
+
+  mock_providers:
+    build: .
+    command: uvicorn apps.mock_providers.main:app --host 0.0.0.0 --port 8001 --reload
+    env_file: .env
+    environment:
+      API_BASE_URL: http://api:8000
+      WEBHOOK_SECRET: demo-webhook-secret
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/app
+
+  outbox_relay:
+    build: .
+    command: python -m apps.worker.outbox_relay
+    env_file: .env
+    environment:
+      DATABASE_URL_SYNC: postgresql+psycopg2://amop:amop@postgres:5432/amop
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+
+volumes:
+  pgdata:
+  docdata:

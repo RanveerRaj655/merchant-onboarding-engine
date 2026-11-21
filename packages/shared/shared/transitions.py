@@ -1,0 +1,47 @@
+from shared.enums import ApplicationStatus as S
+
+ALLOWED_TRANSITIONS: dict[S, set[S]] = {
+    S.DRAFT: {S.SUBMITTED},
+    S.SUBMITTED: {S.EXTRACTING},
+    S.EXTRACTING: {
+        S.PENDING_VERIFICATION,
+        S.EXTRACTION_FAILED,
+        S.MISSING_INFO,
+        S.IN_REVIEW,
+    },
+    S.EXTRACTION_FAILED: {S.IN_REVIEW, S.MISSING_INFO, S.FAILED},
+    S.PENDING_VERIFICATION: {S.AWAITING_CALLBACKS, S.IN_REVIEW, S.FAILED},
+    S.AWAITING_CALLBACKS: {
+        S.VERIFICATION_PARTIAL,
+        S.IN_REVIEW,
+        S.CHECKS_PASSED,
+        S.MISSING_INFO,
+        S.FAILED,
+    },
+    S.VERIFICATION_PARTIAL: {
+        S.AWAITING_CALLBACKS,
+        S.CHECKS_PASSED,
+        S.IN_REVIEW,
+        S.MISSING_INFO,
+        S.VERIFICATION_PARTIAL,
+        S.FAILED,
+    },
+    S.CHECKS_PASSED: {S.PROVISIONING, S.PENDING_VERIFICATION, S.IN_REVIEW},
+    S.PROVISIONING: {S.APPROVED, S.IN_REVIEW, S.FAILED},
+    S.MISSING_INFO: {S.EXTRACTING, S.IN_REVIEW, S.FAILED},
+    S.IN_REVIEW: {
+        S.PENDING_VERIFICATION,
+        S.CHECKS_PASSED,
+        S.MISSING_INFO,
+        S.REJECTED,
+        S.FAILED,
+        S.PROVISIONING,
+    },
+    S.APPROVED: set(),
+    S.REJECTED: set(),
+    S.FAILED: set(),
+}
+
+
+def can_transition(from_status: S, to_status: S) -> bool:
+    return to_status in ALLOWED_TRANSITIONS.get(from_status, set())

@@ -1,0 +1,160 @@
+{
+  "_comment": "SYNTHETIC ONLY — format-valid Indian KYC-shaped fixtures. Not real persons or GSTINs from the internet.",
+  "registry": [
+    {
+      "id": "M-001",
+      "scenario": "happy",
+      "legal_name": "Acme Retail Private Limited",
+      "trade_name": "Acme Store",
+      "pan": "AABCA1234A",
+      "gstin": "27AABCA1234A1Z5",
+      "bank_account_number": "50100123456789",
+      "ifsc": "HDFC0001234",
+      "contact_email": "ops@acme-demo.test",
+      "contact_phone": "+919811100001",
+      "business_category": "retail",
+      "pan_status": "ACTIVE",
+      "gst_status": "ACTIVE",
+      "bank_status": "ACTIVE",
+      "documents": {
+        "pan_card": "docs/M-001_pan_clear.png",
+        "gst_cert": "docs/M-001_gst_clear.png",
+        "cheque": "docs/M-001_cheque_clear.png"
+      }
+    },
+    {
+      "id": "M-002",
+      "scenario": "gst_fail",
+      "legal_name": "Orbit Traders Private Limited",
+      "trade_name": "Orbit Mart",
+      "pan": "AABCO5678B",
+      "gstin": "29AABCO5678B1Z2",
+      "bank_account_number": "50200987654321",
+      "ifsc": "ICIC0002345",
+      "contact_email": "finance@orbit-demo.test",
+      "contact_phone": "+919811100002",
+      "business_category": "wholesale",
+      "pan_status": "ACTIVE",
+      "gst_status": "CANCELLED",
+      "bank_status": "ACTIVE",
+      "documents": {
+        "pan_card": "docs/M-002_pan_clear.png",
+        "gst_cert": "docs/M-002_gst_clear.png",
+        "cheque": "docs/M-002_cheque_clear.png"
+      },
+      "hitl_hint": "On IN_REVIEW use HITL correct: set PAN/GSTIN to ACTIVE registry values AABCA1234A / 27AABCA1234A1Z5, mode=Force async re-verify."
+    },
+    {
+      "id": "M-003",
+      "scenario": "pan_fail",
+      "legal_name": "Nimbus Services LLP",
+      "trade_name": "Nimbus Soft",
+      "pan": "AABCN9012C",
+      "gstin": "07AABCN9012C1Z8",
+      "bank_account_number": "60300111222333",
+      "ifsc": "SBIN0003456",
+      "contact_email": "admin@nimbus-demo.test",
+      "contact_phone": "+919811100003",
+      "business_category": "services",
+      "pan_status": "INACTIVE",
+      "gst_status": "ACTIVE",
+      "bank_status": "ACTIVE",
+      "documents": {
+        "pan_card": "docs/M-003_pan_clear.png",
+        "gst_cert": "docs/M-003_gst_clear.png",
+        "cheque": "docs/M-003_cheque_clear.png"
+      },
+      "hitl_hint": "On IN_REVIEW use HITL correct: set PAN to ACTIVE AABCA1234A (and matching GSTIN), mode=Force async re-verify."
+    },
+    {
+      "id": "M-004",
+      "scenario": "blurred_docs",
+      "legal_name": "Pixel Foods Private Limited",
+      "trade_name": "Pixel Kitchen",
+      "pan": "AABCP3456D",
+      "gstin": "19AABCP3456D1Z1",
+      "bank_account_number": "70400444555666",
+      "ifsc": "AXIS0004567",
+      "contact_email": "hello@pixel-demo.test",
+      "contact_phone": "+919811100004",
+      "business_category": "food",
+      "pan_status": "ACTIVE",
+      "gst_status": "ACTIVE",
+      "bank_status": "ACTIVE",
+      "documents": {
+        "pan_card": "docs/M-004_pan_blurred.png",
+        "gst_cert": "docs/M-004_gst_blurred.png",
+        "cheque": "docs/M-004_cheque_clear.png"
+      }
+    },
+    {
+      "id": "M-005",
+      "scenario": "blacked_out_docs",
+      "legal_name": "Shadow Logistics Private Limited",
+      "trade_name": "Shadow Freight",
+      "pan": "AABCS7890E",
+      "gstin": "24AABCS7890E1Z3",
+      "bank_account_number": "80500777888999",
+      "ifsc": "KKBK0005678",
+      "contact_email": "ops@shadow-demo.test",
+      "contact_phone": "+919811100005",
+      "business_category": "logistics",
+      "pan_status": "ACTIVE",
+      "gst_status": "ACTIVE",
+      "bank_status": "ACTIVE",
+      "documents": {
+        "pan_card": "docs/M-005_pan_blacked.png",
+        "gst_cert": "docs/M-005_gst_blacked.png",
+        "cheque": "docs/M-005_cheque_clear.png"
+      }
+    },
+    {
+      "id": "M-006",
+      "scenario": "doc_conflict",
+      "legal_name": "Mismatch Merchants Private Limited",
+      "trade_name": "Mismatch Mart",
+      "pan": "AABCM1111F",
+      "gstin": "09AABCM1111F1Z7",
+      "bank_account_number": "90600123444321",
+      "ifsc": "YESB0006789",
+      "contact_email": "mismatch@demo.test",
+      "contact_phone": "+919811100006",
+      "business_category": "retail",
+      "pan_status": "ACTIVE",
+      "gst_status": "ACTIVE",
+      "bank_status": "ACTIVE",
+      "form_overrides": {
+        "pan": "ZZZZZ9999Z",
+        "gstin": "09ZZZZZ9999Z1Z0"
+      },
+      "documents": {
+        "pan_card": "docs/M-006_pan_clear.png",
+        "gst_cert": "docs/M-006_gst_clear.png",
+        "cheque": "docs/M-006_cheque_clear.png"
+      },
+      "hitl_hint": "Align form PAN/GSTIN to document values AABCM1111F / 09AABCM1111F1Z7 then Save correction (auto re-extract)."
+    },
+    {
+      "id": "M-007",
+      "scenario": "provision_fail",
+      "legal_name": "Provision Retry Private Limited",
+      "trade_name": "Provision Co",
+      "pan": "AABCP7777G",
+      "gstin": "27AABCP7777G1Z4",
+      "bank_account_number": "90700999888777",
+      "ifsc": "HDFC0007777",
+      "contact_email": "provision@demo.test",
+      "contact_phone": "+919811100007",
+      "business_category": "retail",
+      "pan_status": "ACTIVE",
+      "gst_status": "ACTIVE",
+      "bank_status": "ACTIVE",
+      "documents": {
+        "pan_card": "docs/M-007_pan_clear.png",
+        "gst_cert": "docs/M-007_gst_clear.png",
+        "cheque": "docs/M-007_cheque_clear.png"
+      },
+      "hitl_hint": "After PROVISION_FAIL → IN_REVIEW, use Operator action Retry provision (clears provision_fail scenario)."
+    }
+  ]
+}

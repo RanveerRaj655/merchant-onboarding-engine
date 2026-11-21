@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Review queue{% endblock %}
+{% block topbar_title %}Review queue{% endblock %}
+{% block topbar_meta %}Exceptions, missing info, and live verification status{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <h1>Applications in flight</h1>
+  <p>Track extraction, async verification, and human review. Open a case to correct data, re-upload documents, or override with an audit note.</p>
+</section>
+
+<div class="metrics" aria-label="Queue metrics">
+  <div class="metric">
+    <div class="label">Total</div>
+    <div class="value">{{ metrics.applications_total }}</div>
+  </div>
+  <div class="metric metric--warn">
+    <div class="label">In review</div>
+    <div class="value">{{ metrics.in_review }}</div>
+  </div>
+  <div class="metric metric--accent">
+    <div class="label">Approved</div>
+    <div class="value">{{ metrics.approved }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">Exception rate</div>
+    <div class="value">{{ '%.0f'|format(metrics.exception_rate * 100) }}%</div>
+  </div>
+</div>
+
+<nav class="tabs" aria-label="Queue filters">
+  {% for key, label, _ in tabs %}
+  <a class="tab {% if tab == key %}active{% endif %}" href="/ops?tab={{ key }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+
+{% if tab == 'review' and review_cases %}
+<div class="table-shell">
+  <table>
+    <thead>
+      <tr>
+        <th>Case</th>
+        <th>Application</th>
+        <th>Merchant</th>
+        <th>Reasons</th>
+        <th>Status</th>
+        <th>Priority</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in review_cases %}
+      <tr>
+        <td class="mono"><a href="/ops/applications/{{ c.application_id }}">{{ c.id[:8] }}</a></td>
+        <td class="mono">{{ c.reference }}</td>
+        <td>{{ c.legal_name }}</td>
+        <td>{{ c.reason_codes | join(', ') }}</td>
+        <td><span class="badge {{ c.app_status }}">{{ c.app_status }}</span></td>
+        <td class="mono">{{ c.priority }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif apps %}
+<div class="table-shell">
+  <table>
+    <thead>
+      <tr>
+        <th>Reference</th>
+        <th>Legal name</th>
+        <th>Status</th>
+        <th>PAN</th>
+        <th>GSTIN</th>
+        <th>Updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in apps %}
+      <tr>
+        <td class="mono"><a href="/ops/applications/{{ a.id }}">{{ a.reference }}</a></td>
+        <td>{{ a.legal_name }}</td>
+        <td><span class="badge {{ a.status }}">{{ a.status }}</span></td>
+        <td class="mono">{{ a.pan_masked }}</td>
+        <td class="mono">{{ a.gstin_masked }}</td>
+        <td class="muted mono" style="font-size:0.78rem">{{ a.updated_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty">
+  Nothing in this filter yet.
+  <div style="margin-top:0.75rem">
+    <a class="btn primary" href="/ops/submit">Submit an application</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

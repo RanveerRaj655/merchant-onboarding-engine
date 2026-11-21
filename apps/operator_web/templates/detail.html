@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ app.reference }}{% endblock %}
+{% block topbar_title %}Application detail{% endblock %}
+{% block topbar_meta %}{{ app.reference }} · v{{ app.version }}{% endblock %}
+{% block content %}
+<nav class="crumb">
+  <a href="/ops">Queue</a>
+  <span aria-hidden="true">/</span>
+  <span>{{ app.reference }}</span>
+</nav>
+
+{% include "partials/detail_body.html" %}
+{% endblock %}

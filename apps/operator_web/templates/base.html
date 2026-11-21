@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Merchant Onboarding{% endblock %} · Pine Labs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <script src="/static/js/htmx.min.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <a class="brand-mark" href="/ops" aria-label="Pine Labs home">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3L20 19H4L12 3Z" fill="#50D387"/>
+            <path d="M12 8L16.5 17H7.5L12 8Z" fill="#003323"/>
+          </svg>
+          pine labs
+        </a>
+        <div class="brand-product">Merchant onboarding</div>
+      </div>
+      <nav class="sidebar-nav" aria-label="Primary">
+        <a href="/ops" class="{% if request.url.path.rstrip('/') in ['', '/ops'] %}is-active{% endif %}">Review queue</a>
+        <a href="/ops/submit" class="{% if '/ops/submit' in request.url.path %}is-active{% endif %}">Submit application</a>
+        <a href="/docs">API reference</a>
+        <a href="/api/v1/fixtures/merchants">Fixture registry</a>
+      </nav>
+      <div class="sidebar-foot">
+        Synthetic KYC fixtures only. Sensitive fields masked by default. Demo operator console — not production IAM.
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <h1 class="topbar-title">{% block topbar_title %}Operations{% endblock %}</h1>
+        <div class="topbar-meta">{% block topbar_meta %}Sandbox · Merchant operations{% endblock %}</div>
+      </header>
+      <main class="wrap">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+</body>
+</html>
