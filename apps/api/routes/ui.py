@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from apps.api.db.models import (
     Application,
     AuditEvent,
+    Document,
     ExtractionResult,
     MerchantAccount,
     ReviewCase,
@@ -125,15 +126,30 @@ def _application_detail(db: Session, application_id: UUID) -> dict:
                 }
             )
 
+    # Identify latest document IDs per type for active highlighting
+    latest_doc_ids = set()
+    docs = (
+        db.query(Document)
+        .filter(Document.application_id == application_id)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+    seen_types = set()
+    for d in docs:
+        if d.type not in seen_types:
+            seen_types.add(d.type)
+            latest_doc_ids.add(d.id)
+
     extractions = (
         db.query(ExtractionResult)
         .filter(ExtractionResult.application_id == application_id)
+        .order_by(ExtractionResult.created_at.desc())
         .all()
     )
     audit = (
         db.query(AuditEvent)
         .filter(AuditEvent.application_id == application_id)
-        .order_by(AuditEvent.created_at.asc())
+        .order_by(AuditEvent.created_at.desc())
         .all()
     )
     reviews = (
@@ -161,11 +177,15 @@ def _application_detail(db: Session, application_id: UUID) -> dict:
     detail["extractions"] = [
         {
             "id": str(e.id),
-            "fields": e.fields,
+            "doc_type": e.document.type if e.document else "DOCUMENT",
+            "is_latest": e.document_id in latest_doc_ids,
+            "fields": {k: v for k, v in (e.fields or {}).items() if not k.startswith("_")},
+            "raw_fields": e.fields,
             "overall_confidence": e.overall_confidence,
             "conflicts": e.conflicts,
             "status": e.status,
             "extractor": e.extractor,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
         }
         for e in extractions
     ]

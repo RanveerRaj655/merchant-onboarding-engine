@@ -671,7 +671,7 @@ class ApplicationService:
             ReviewReason.PROVISION_FAIL.value,
         }
 
-        if any(r in unread_reasons for r in reason_codes) and not uploaded_types:
+        if mode != "verify" and any(r in unread_reasons for r in reason_codes) and not uploaded_types:
             raise ValueError(
                 "This case needs clear document re-uploads before re-processing."
             )

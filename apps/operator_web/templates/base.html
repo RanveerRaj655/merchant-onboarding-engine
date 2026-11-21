@@ -44,5 +44,21 @@
       </main>
     </div>
   </div>
+  <script>
+    function formatTimestamps() {
+      document.querySelectorAll('.audit-ts').forEach(function(el) {
+        var raw = el.getAttribute('data-utc');
+        if (raw) {
+          var d = new Date(raw);
+          if (!isNaN(d.getTime())) {
+            el.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' (' + d.toLocaleDateString() + ')';
+            el.title = raw + ' (UTC)';
+          }
+        }
+      });
+    }
+    document.addEventListener('DOMContentLoaded', formatTimestamps);
+    document.addEventListener('htmx:afterSettle', formatTimestamps);
+  </script>
 </body>
 </html>

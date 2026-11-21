@@ -110,7 +110,7 @@ class VerificationOrchestrator:
                 provider=provider,
                 idempotency_key=idem,
                 status=VerificationStatus.PENDING.value,
-                request_payload=self._redact(payload),
+                request_payload=payload,
                 attempt=next_attempt,
                 timeout_at=timeout_at,
                 correlation_id=correlation_id,

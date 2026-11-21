@@ -163,10 +163,23 @@
       <p class="muted">No extraction results yet.</p>
       {% endif %}
       {% for e in app.extractions %}
-      <div class="extract-block">
-        <span class="badge {{ e.status }}">{{ e.status }}</span>
-        <span class="muted">{{ e.extractor }} · conf {{ '%.2f'|format(e.overall_confidence) }}</span>
-        <pre class="mono">{{ e.fields }}</pre>
+      <div class="extract-block" style="{% if not e.is_latest %}opacity:0.65;border-style:dashed;margin-top:0.6rem;{% else %}margin-top:0.75rem;{% endif %}">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem">
+          <strong style="text-transform:uppercase;font-size:0.8rem;letter-spacing:0.04em">
+            {% if e.doc_type == 'PAN_CARD' %}PAN Card
+            {% elif e.doc_type == 'GST_CERT' %}GST Certificate
+            {% elif e.doc_type == 'CANCELLED_CHEQUE' %}Cancelled Cheque
+            {% else %}{{ e.doc_type }}{% endif %}
+          </strong>
+          <span class="badge {{ e.status }}">{{ e.status }}</span>
+          {% if e.is_latest %}
+          <span class="badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd">Active Document</span>
+          {% else %}
+          <span class="muted" style="font-size:0.75rem">(Prior scan attempt)</span>
+          {% endif %}
+          <span class="muted" style="margin-left:auto;font-size:0.75rem">{{ e.extractor }} · conf {{ '%.2f'|format(e.overall_confidence) }}</span>
+        </div>
+        <pre class="mono" style="margin:0;padding:0.5rem;background:#f8fafc;border-radius:4px">{% if e.fields %}{{ e.fields }}{% else %}{{ e.raw_fields }}{% endif %}</pre>
         {% if e.conflicts %}<p class="conflict" style="margin:0.4rem 0 0">Conflicts: {{ e.conflicts }}</p>{% endif %}
       </div>
       {% endfor %}
@@ -258,12 +271,17 @@
         <li>
           <strong>{{ e.action }}</strong>
           {% if e.from_status %} {{ e.from_status }} → {{ e.to_status }}{% endif %}
-          <div class="meta">{{ e.created_at }} · {{ e.actor }}</div>
+          <div class="meta"><span class="audit-ts" data-utc="{{ e.created_at }}">{{ e.created_at }}</span> · {{ e.actor }}</div>
         </li>
         {% else %}
         <li class="muted">No audit events yet.</li>
         {% endfor %}
       </ul>
+      <script>
+        if (typeof formatTimestamps === 'function') {
+          formatTimestamps();
+        }
+      </script>
     </section>
   </div>
 </div>

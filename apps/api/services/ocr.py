@@ -140,9 +140,43 @@ def extract_fields_from_text(text: str, doc_type: str) -> dict[str, Any]:
     fields: dict[str, Any] = {}
 
     pan_m = PAN_RE.search(upper)
+    if not pan_m:
+        pan_m = PAN_RE.search(re.sub(r"[\s\-_]+", "", upper))
+
     gst_m = GSTIN_RE.search(upper)
+    if not gst_m:
+        gst_m = GSTIN_RE.search(re.sub(r"[\s\-_]+", "", upper))
+
+    # Context-aware fallback: On GST certificates, search for state code + PAN + suffix
+    if not gst_m and pan_m:
+        pan_val = pan_m.group(1)
+        embedded_m = re.search(rf"([0-9IOl|L]{{2,4}})\s*{pan_val}\s*([0-9A-Z]{{3,5}})", upper)
+        if embedded_m:
+            prefix = (
+                embedded_m.group(1)
+                .replace("L", "")
+                .replace("I", "1")
+                .replace("l", "1")
+                .replace("|", "1")
+                .replace("O", "0")
+            )
+            prefix = prefix[-2:]
+            suffix = embedded_m.group(2)
+            if "2Z" in suffix:
+                suffix = suffix.replace("2Z", "Z")
+            suffix = suffix[:3]
+            candidate = f"{prefix}{pan_val}{suffix}"
+            match = GSTIN_RE.match(candidate)
+            if match:
+                gst_m = match
+
     ifsc_m = IFSC_RE.search(upper)
+    if not ifsc_m:
+        ifsc_m = IFSC_RE.search(re.sub(r"[\s\-_]+", "", upper))
+
     acct_m = ACCOUNT_RE.search(text)
+    if not acct_m:
+        acct_m = ACCOUNT_RE.search(re.sub(r"[\s\-]+", "", text))
 
     if doc_type == "PAN_CARD" or pan_m:
         if pan_m:
