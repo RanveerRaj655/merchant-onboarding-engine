@@ -89,15 +89,11 @@ class VerificationOrchestrator:
                 .filter(
                     VerificationRequest.application_id == app.id,
                     VerificationRequest.provider == provider,
-                    VerificationRequest.status.notin_(
-                        [VerificationStatus.SUPERSEDED.value]
-                    ),
                 )
                 .all()
             )
-            next_attempt = 1
+            next_attempt = max([prior.attempt for prior in priors], default=0) + 1
             for prior in priors:
-                next_attempt = max(next_attempt, prior.attempt + 1)
                 if prior.status != VerificationStatus.SUPERSEDED.value:
                     prior.status = VerificationStatus.SUPERSEDED.value
 

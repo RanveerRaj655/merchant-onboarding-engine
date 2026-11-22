@@ -1,11 +1,12 @@
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from apps.api.config import get_settings
 from apps.api.db.models import (
     Application,
     AuditEvent,
@@ -45,8 +46,17 @@ STATUS_TABS = [
 def _metrics(db: Session) -> dict:
     total = db.query(Application).count()
     in_review = db.query(Application).filter(Application.status == "IN_REVIEW").count()
+    missing_info = db.query(Application).filter(Application.status == "MISSING_INFO").count()
     approved = db.query(Application).filter(Application.status == "APPROVED").count()
-    rejected = db.query(Application).filter(Application.status == "REJECTED").count()
+    rejected = db.query(Application).filter(Application.status.in_(["REJECTED", "FAILED"])).count()
+    in_verification = (
+        db.query(Application)
+        .filter(Application.status.in_([
+            "SUBMITTED", "EXTRACTING", "PENDING_VERIFICATION",
+            "AWAITING_CALLBACKS", "VERIFICATION_PARTIAL", "CHECKS_PASSED", "PROVISIONING"
+        ]))
+        .count()
+    )
     callbacks = db.query(VerificationCallback).count()
     duplicates = (
         db.query(VerificationCallback)
@@ -62,11 +72,20 @@ def _metrics(db: Session) -> dict:
     return {
         "applications_total": total,
         "in_review": in_review,
+        "missing_info": missing_info,
+        "in_verification": in_verification,
         "approved": approved,
         "rejected": rejected,
         "exception_rate": (in_review / total) if total else 0,
         "callback_duplicate_rate": (duplicates / callbacks) if callbacks else 0,
         "verification_timeout_rate": (timeouts / sent) if sent else 0,
+        "tab_counts": {
+            "review": in_review,
+            "missing": missing_info,
+            "verification": in_verification,
+            "approved": approved,
+            "rejected": rejected,
+        },
     }
 
 
@@ -174,12 +193,30 @@ def _application_detail(db: Session, application_id: UUID) -> dict:
         for v in verifications
     ]
     detail["callbacks"] = callbacks
+
+    # Document details with preview links
+    detail["documents"] = [
+        {
+            "id": str(d.id),
+            "type": d.type,
+            "filename": Path(d.storage_key).name if d.storage_key else f"{d.type}.png",
+            "has_file": bool(d.storage_key),
+            "preview_url": f"/ops/documents/{d.id}/file" if d.storage_key else None,
+            "is_latest": d.id in latest_doc_ids,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        }
+        for d in docs
+    ]
+
     detail["extractions"] = [
         {
             "id": str(e.id),
+            "document_id": str(e.document_id) if e.document_id else None,
+            "preview_url": f"/ops/documents/{e.document_id}/file" if e.document and e.document.storage_key else None,
             "doc_type": e.document.type if e.document else "DOCUMENT",
             "is_latest": e.document_id in latest_doc_ids,
             "fields": {k: v for k, v in (e.fields or {}).items() if not k.startswith("_")},
+            "quality": (e.fields or {}).get("_quality", {}),
             "raw_fields": e.fields,
             "overall_confidence": e.overall_confidence,
             "conflicts": e.conflicts,
@@ -188,6 +225,116 @@ def _application_detail(db: Session, application_id: UUID) -> dict:
             "created_at": e.created_at.isoformat() if e.created_at else None,
         }
         for e in extractions
+    ]
+
+    # Calculate 3-Way Reconciliation matrix (Form vs Document vs Registry)
+    latest_extracted_pan = None
+    latest_extracted_gst = None
+    latest_extracted_bank = None
+    latest_extracted_ifsc = None
+
+    for e in extractions:
+        if e.document_id in latest_doc_ids:
+            fields = e.fields or {}
+            if "pan" in fields and not latest_extracted_pan:
+                v = fields["pan"]
+                latest_extracted_pan = v.get("value") if isinstance(v, dict) else v
+            if "gstin" in fields and not latest_extracted_gst:
+                v = fields["gstin"]
+                latest_extracted_gst = v.get("value") if isinstance(v, dict) else v
+            if "bank_account_number" in fields and not latest_extracted_bank:
+                v = fields["bank_account_number"]
+                latest_extracted_bank = v.get("value") if isinstance(v, dict) else v
+            if "ifsc" in fields and not latest_extracted_ifsc:
+                v = fields["ifsc"]
+                latest_extracted_ifsc = v.get("value") if isinstance(v, dict) else v
+
+    verif_by_provider = {}
+    for v in verifications:
+        if v.status != "SUPERSEDED":
+            verif_by_provider[v.provider] = v
+
+    def _eval_row(form_val, doc_val, verif_req):
+        f = (form_val or "").strip().upper()
+        d = (doc_val or "").strip().upper()
+        has_f = bool(f)
+        has_d = bool(d)
+        is_pass = verif_req and (verif_req.outcome == "PASS" or verif_req.status in ("PASS", "SUCCEEDED"))
+        is_fail = verif_req and (verif_req.outcome == "FAIL" or verif_req.status in ("FAIL", "FAILED"))
+
+        if has_f and has_d and f == d and is_pass:
+            return "MATCH", "Verified & Consistent"
+        if has_f and has_d and f != d:
+            return "MISMATCH", f"Form ({f[-4:]}) differs from Doc ({d[-4:]})"
+        if is_fail:
+            return "FAILED", "Registry rejected value"
+        if is_pass:
+            return "MATCH", "Registry verified"
+        if not has_d:
+            return "UNEXTRACTED", "Awaiting clear document"
+        return "PENDING", "Verification pending"
+
+    v_pan = verif_by_provider.get("PAN")
+    v_gst = verif_by_provider.get("GST")
+    v_bank = verif_by_provider.get("BANK")
+
+    pan_status, pan_note = _eval_row(app.pan_raw, latest_extracted_pan, v_pan)
+    gst_status, gst_note = _eval_row(app.gstin_raw, latest_extracted_gst, v_gst)
+    bank_status, bank_note = _eval_row(app.bank_account_raw, latest_extracted_bank, v_bank)
+
+    detail["reconciliation"] = [
+        {
+            "field": "PAN Number",
+            "code": "PAN",
+            "form_val": app.pan_raw or "—",
+            "form_masked": app.pan_masked or "—",
+            "doc_val": latest_extracted_pan or "Not extracted",
+            "doc_masked": (latest_extracted_pan[:2] + "*****" + latest_extracted_pan[-1:]) if latest_extracted_pan and len(latest_extracted_pan) == 10 else (latest_extracted_pan or "—"),
+            "provider": "PAN (NSDL / ITD)",
+            "verif_status": v_pan.status if v_pan else "NOT_STARTED",
+            "verif_outcome": v_pan.outcome if v_pan else None,
+            "status": pan_status,
+            "note": pan_note,
+        },
+        {
+            "field": "GSTIN Identifier",
+            "code": "GSTIN",
+            "form_val": app.gstin_raw or "—",
+            "form_masked": app.gstin_masked or "—",
+            "doc_val": latest_extracted_gst or "Not extracted",
+            "doc_masked": (latest_extracted_gst[:2] + "***********" + latest_extracted_gst[-2:]) if latest_extracted_gst and len(latest_extracted_gst) == 15 else (latest_extracted_gst or "—"),
+            "provider": "GST (Govt Portal)",
+            "verif_status": v_gst.status if v_gst else "NOT_STARTED",
+            "verif_outcome": v_gst.outcome if v_gst else None,
+            "status": gst_status,
+            "note": gst_note,
+        },
+        {
+            "field": "Bank Account",
+            "code": "BANK",
+            "form_val": app.bank_account_raw or "—",
+            "form_masked": app.bank_account_masked or "—",
+            "doc_val": latest_extracted_bank or "Not extracted",
+            "doc_masked": ("**********" + latest_extracted_bank[-4:]) if latest_extracted_bank and len(latest_extracted_bank) >= 4 else (latest_extracted_bank or "—"),
+            "provider": "BANK (Penny Drop)",
+            "verif_status": v_bank.status if v_bank else "NOT_STARTED",
+            "verif_outcome": v_bank.outcome if v_bank else None,
+            "status": bank_status,
+            "note": bank_note,
+        },
+        {
+            "field": "IFSC Code",
+            "code": "IFSC",
+            "form_val": app.ifsc or "—",
+            "form_masked": app.ifsc or "—",
+            "doc_val": latest_extracted_ifsc or (app.ifsc or "—"),
+            "doc_masked": app.ifsc or "—",
+            "provider": "BANK (Routing)",
+            "verif_status": v_bank.status if v_bank else "NOT_STARTED",
+            "verif_outcome": v_bank.outcome if v_bank else None,
+            "status": "MATCH" if (app.ifsc and v_bank and v_bank.outcome == "PASS") else ("PENDING" if app.ifsc else "MISSING"),
+            "note": "Bank branch routing confirmed" if (v_bank and v_bank.outcome == "PASS") else "Awaiting bank check",
+        },
     ]
     detail["audit"] = [
         {
@@ -238,7 +385,7 @@ def queue_page(request: Request, tab: str = "review", db: Session = Depends(get_
     )
     review_cases = _review_cases(db) if tab == "review" else []
     m = _metrics(db)
-    return templates.TemplateResponse(
+    resp = templates.TemplateResponse(
         request,
         "queue.html",
         {
@@ -249,6 +396,9 @@ def queue_page(request: Request, tab: str = "review", db: Session = Depends(get_
             "metrics": m,
         },
     )
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 def _detail_context(
@@ -335,6 +485,27 @@ def detail_live_partial(
     resp = templates.TemplateResponse(request, "partials/detail_live.html", ctx)
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@router.get("/ops/documents/{document_id}/file")
+def get_document_file(document_id: UUID, db: Session = Depends(get_db)):
+    """Serve uploaded or fixture document image for visual inspector."""
+    doc = db.get(Document, document_id)
+    if not doc or not doc.storage_key:
+        raise HTTPException(404, "Document has no stored file")
+    settings = get_settings()
+    path = Path(settings.doc_storage_path) / doc.storage_key
+    if path.exists():
+        return FileResponse(path, media_type=doc.content_type or "image/png")
+    # Fallback to fixtures directory
+    fixture_path = Path("fixtures") / doc.storage_key
+    if fixture_path.exists():
+        return FileResponse(fixture_path, media_type=doc.content_type or "image/png")
+    # Check if doc.storage_key is an absolute or direct relative path
+    direct_path = Path(doc.storage_key)
+    if direct_path.exists():
+        return FileResponse(direct_path, media_type=doc.content_type or "image/png")
+    raise HTTPException(404, "Document file not found on disk")
 
 
 @router.post("/ops/applications/{application_id}/hitl-correct")
@@ -464,6 +635,7 @@ async def reupload_documents(
 
 @router.post("/ops/applications/{application_id}/actions")
 def ui_action(
+    request: Request,
     application_id: UUID,
     action: str = Form(...),
     note: str = Form(...),
@@ -471,25 +643,32 @@ def ui_action(
     case_id: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ):
-    if not case_id:
-        case = ReviewCase(
-            application_id=application_id,
-            reason_codes=["OPERATOR_ESCALATION"],
-            status="OPEN",
-            priority=60,
-        )
-        db.add(case)
-        db.flush()
-        case_id = str(case.id)
-
     svc = ApplicationService(db)
-    svc.operator_action(
-        UUID(case_id),
-        action=action,
-        note=note,
-        version=version,
-        actor="operator:demo",
-    )
+    try:
+        if not case_id:
+            case = ReviewCase(
+                application_id=application_id,
+                reason_codes=["OPERATOR_ESCALATION"],
+                status="OPEN",
+                priority=60,
+            )
+            db.add(case)
+            db.flush()
+            case_id = str(case.id)
+
+        svc.operator_action(
+            UUID(case_id),
+            action=action,
+            note=note,
+            version=version,
+            actor="operator:demo",
+        )
+    except Exception as e:
+        db.rollback()
+        return detail_page(
+            request, application_id, db, hitl_error=str(e)
+        )
+
     return RedirectResponse(
         url=f"/ops/applications/{application_id}", status_code=303
     )
@@ -499,11 +678,14 @@ def ui_action(
 def submit_page(request: Request, error: str | None = None):
     from shared.fixtures import load_registry
 
-    return templates.TemplateResponse(
+    resp = templates.TemplateResponse(
         request,
         "submit.html",
         {"merchants": load_registry(), "error": error},
     )
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @router.post("/ops/submit-new")

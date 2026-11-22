@@ -405,7 +405,11 @@ class ApplicationService:
 
         if action == "approve":
             if not VerificationOrchestrator(self.db).checks_passed(app):
-                raise ValueError("Required checks must pass for current details before approval")
+                raise ValueError(
+                    "Cannot approve: Required verification checks (PAN, GST, Bank) must pass before approving an application. "
+                    "Since checks failed or are incomplete, please use the Human-in-the-Loop desk to correct details and re-verify, "
+                    "or select 'Re-verify async registries' / 'Reject merchant'."
+                )
             case.status = ReviewCaseStatus.RESOLVED.value
             case.resolution = ReviewResolution.APPROVED.value
             case.notes = note

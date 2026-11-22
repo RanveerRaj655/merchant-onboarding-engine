@@ -1,12 +1,17 @@
 {% extends "base.html" %}
-{% block title %}{{ app.reference }}{% endblock %}
-{% block topbar_title %}Application detail{% endblock %}
-{% block topbar_meta %}{{ app.reference }} · v{{ app.version }}{% endblock %}
+{% block title %}{{ app.reference }} · {{ app.legal_name }}{% endblock %}
+{% block topbar_title %}{{ app.legal_name }}{% endblock %}
+{% block topbar_meta %}{{ app.reference }} · v{{ app.version }} · {{ app.status }}{% endblock %}
 {% block content %}
 <nav class="crumb">
-  <a href="/ops">Queue</a>
-  <span aria-hidden="true">/</span>
-  <span>{{ app.reference }}</span>
+  <a href="/ops">
+    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+    </svg>
+    Back to Review Queue
+  </a>
+  <span class="crumb-separator">/</span>
+  <span class="mono" style="font-weight:600;color:var(--pine-deep)">{{ app.reference }}</span>
 </nav>
 
 {% include "partials/detail_body.html" %}
