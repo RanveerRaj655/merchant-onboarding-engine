@@ -1,8 +1,30 @@
 # Autonomous Merchant Onboarding Platform (AMOP)
 
-48-hour vertical slice: merchants submit an application + documents → stub extraction → async mock PAN/GST(/bank) verification → auto-provision **or** HITL escalation → merchant ID + full audit trail.
+48-hour vertical slice: merchants submit an application + documents → OCR & document quality extraction → async mock PAN/GST(/bank) verification → auto-provision **or** HITL escalation → merchant ID + full audit trail.
 
-**Stack:** Python 3.12 · FastAPI · Celery + Redis · Postgres · Jinja2/HTMX · transactional outbox
+**Stack:** Python 3.12 · FastAPI · Celery + Redis · Postgres · Jinja2/HTMX · Transactional Outbox
+
+---
+
+### 🎥 Live Video Walkthrough
+[![Watch Demo Video on Loom](https://img.shields.io/badge/Loom_Demo_Video-Watch_Walkthrough-625df5?style=for-the-badge&logo=loom&logoColor=white)](https://www.loom.com/share/d3815771abde464b8502cf944308971d)  
+👉 **[Watch the full 5-Minute End-to-End Demonstration on Loom](https://www.loom.com/share/d3815771abde464b8502cf944308971d)**
+
+---
+
+## 🖥️ Platform Interface & Operator Console
+
+### 1. Operations Review Desk (`/ops`)
+*Real-time exception governance queue, operational metrics (exception rates, timeout ratios), status filters, and live HTMX synchronization.*
+
+![Merchant Operations Review Desk](docs/screenshots/review-queue.jpg)
+
+### 2. Merchant Ingestion & Instant KYC Pipeline (`/ops/submit`)
+*Entity profile inputs, interactive drag-and-drop proof uploads, OpenCV image quality threshold rules, and 1-click KYC test scenario launcher.*
+
+![Merchant Ingestion Form & Fixture Pack](docs/screenshots/merchant-onboarding.jpg)
+
+---
 
 > Synthetic KYC fixtures only. Never commit or upload real PAN/GST/bank PII.
 
